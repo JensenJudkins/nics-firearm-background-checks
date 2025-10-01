@@ -113,15 +113,46 @@ def parse_table_new(page):
     )
 
 
-def parse_page(page):
+def detect_pdf_format(pdf):
+    """Detect if this is a daily data PDF or state-by-state monthly PDF"""
+    if len(pdf.pages) < 2:
+        return "unknown"
+    
+    # Check the second page (first page is usually cover/intro)
+    page = pdf.pages[1]
+    text = page.extract_text()
+    
+    # Check for patterns that indicate daily data format
+    if "Day/Month/Year" in text and re.search(r"Year \d{4}", text):
+        return "daily"
+    
+    # Check for patterns that indicate state data format
+    if any(state in text for state in ["Alabama", "Alaska", "Arizona"]):
+        return "state"
+    
+    return "unknown"
+
+
+def parse_page_state_format(page):
+    """Parse a page in the state-by-state monthly format"""
     reds = [
         [1, 0, 0],
         (1, 0, 0),
     ]
     month_chars = [c for c in page.chars if c["non_stroking_color"] in reds]
-    assert len(month_chars)
-
-    month_text = extract_text(month_chars, x_tolerance=2)
+    
+    # If no red characters found, try to find month in text
+    if not month_chars:
+        text = page.extract_text()
+        # Look for month patterns like "March 2024" or "February 2024"
+        month_match = re.search(r"(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}", text)
+        if month_match:
+            month_text = month_match.group(0)
+        else:
+            raise Exception(f"Could not find month information on page {page.page_number}")
+    else:
+        month_text = extract_text(month_chars, x_tolerance=2)
+    
     month = parse_month(month_text)
     sys.stderr.write("\r" + month)
 
@@ -133,7 +164,7 @@ def parse_page(page):
     assert len(table)
 
     table.columns = COLUMNS
-    table[table.columns[2:]] = table[table.columns[2:]].applymap(parse_value)
+    table[table.columns[2:]] = table[table.columns[2:]].map(parse_value)
 
     validate_data(table)
 
@@ -141,10 +172,27 @@ def parse_page(page):
 
 
 def parse_pdf(pdf):
-    checks_dfs = [parse_page(page) for page in pdf.pages if page.page_number > 1]
-    checks = pd.concat(checks_dfs)
+    pdf_format = detect_pdf_format(pdf)
+    
+    if pdf_format == "daily":
+        # For daily format PDFs, we'll return an empty DataFrame
+        # as this format doesn't contain state-by-state data
+        sys.stderr.write("Detected daily data format - skipping (no state-by-state data available)\n")
+        return pd.DataFrame(columns=COLUMNS)
+    elif pdf_format == "state":
+        # Parse state-by-state format
+        checks_dfs = [parse_page_state_format(page) for page in pdf.pages if page.page_number > 1]
+        if not checks_dfs:
+            return pd.DataFrame(columns=COLUMNS)
+        checks = pd.concat(checks_dfs)
+        return checks[~checks["state"].str.contains("Total")]
+    else:
+        raise Exception(f"Unknown PDF format - cannot parse")
 
-    return checks[~checks["state"].str.contains("Total")]
+
+def parse_page(page):
+    """Legacy function - redirects to state format parser"""
+    return parse_page_state_format(page)
 
 
 if __name__ == "__main__":

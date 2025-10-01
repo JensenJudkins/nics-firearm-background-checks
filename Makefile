@@ -9,7 +9,7 @@ all: pdfs/nics-checks-archive.pdf data/partial/nics-checks-archive.csv pdfs/nics
 update: pdfs/nics-checks-last-five-years.pdf data/partial/nics-checks-last-five-years.csv data/nics-firearm-background-checks.csv charts
 
 pdfs/nics-checks-archive.pdf: now
-	wget "https://www.fbi.gov/file-repository/nics_firearms_checks_-_month_year_by_state_type-archive.pdf" -O $@
+	wget "https://www.fbi.gov/file-repository/cjis/nics_firearm_checks_-_day_month_year.pdf" -O $@
 
 pdfs/nics-checks-last-five-years.pdf: now
 	wget "https://www.fbi.gov/file-repository/nics_firearms_checks_-_month_year_by_state_type-last-5-years-1.pdf" -O $@
@@ -24,8 +24,8 @@ data/nics-firearm-background-checks.csv: now
 	python scripts/combine-partials.py
 
 charts: now
-	python scripts/chart-total-checks-36-months.py < data/nics-firearm-background-checks.csv > charts/total-checks-36-months.png
-	python scripts/chart-total-checks-all.py < data/nics-firearm-background-checks.csv > charts/total-checks-all.png
+	python scripts/chart-years-2013-2025.py < data/nics-firearm-background-checks.csv > charts/years-2013-2025.png
+	python scripts/chart-fall-months.py < data/nics-firearm-background-checks.csv > charts/fall-months-1988-2024.png
 
 format:
 	black scripts
